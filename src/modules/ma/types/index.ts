@@ -120,5 +120,89 @@ export interface M4Context {
   }>;
 }
 
+// Types pour l'agent de négociation
+export interface NegotiationContext {
+  deal: Deal;
+  target: Target;
+  phase: NegotiationPhase;
+  strategies: Strategy[];
+  metrics: NegotiationMetrics;
+  conversation_history: NegotiationMessage[];
+}
+
+export interface NegotiationPhase {
+  id: string;
+  name: string;
+  description: string;
+  objectives: string[];
+  key_tactics: string[];
+  success_metrics: string[];
+}
+
+export interface Strategy {
+  id: string;
+  name: string;
+  description: string;
+  applicable_phases: string[];
+  pros: string[];
+  cons: string[];
+  execution_tips: string[];
+}
+
+export interface NegotiationMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  phase_id?: string;
+  strategy_suggestions?: StrategyRecommendation[];
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  confidence_score?: number;
+}
+
+export interface StrategyRecommendation {
+  strategy_id: string;
+  relevance_score: number;
+  reasoning: string;
+  suggested_response?: string;
+}
+
+export interface NegotiationMetrics {
+  overall_score: number;
+  phase_progress: number;
+  relationship_health: number;
+  concessions_made: ConcessionItem[];
+  concessions_gained: ConcessionItem[];
+  risk_level: 'low' | 'medium' | 'high';
+  momentum: 'positive' | 'stagnant' | 'negative';
+}
+
+export interface ConcessionItem {
+  id: string;
+  description: string;
+  value_impact: number;
+  timestamp: string;
+  context: string;
+}
+
+export interface NegotiationSession {
+  id: string;
+  deal_id: string;
+  started_at: string;
+  ended_at?: string;
+  status: 'active' | 'paused' | 'completed';
+  messages: NegotiationMessage[];
+  context: NegotiationContext;
+  outcomes: SessionOutcome[];
+}
+
+export interface SessionOutcome {
+  id: string;
+  type: 'agreement' | 'objection' | 'concession' | 'milestone';
+  description: string;
+  impact_score: number;
+  timestamp: string;
+}
+
 
 
