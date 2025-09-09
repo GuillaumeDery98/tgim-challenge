@@ -13,9 +13,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Building2, DollarSign, TrendingUp, BarChart3 } from "lucide-react";
+import { Loader2, Building2, DollarSign, TrendingUp, BarChart3, FileDown } from "lucide-react";
+import { usePDF } from 'react-to-pdf';
 
 const API_KEY = import.meta.env.VITE_FINANCIAL_PREP_KEY;
+
+// moved inside component to respect hooks rules
 
 // Symboles autorisés pour la version gratuite
 const ALLOWED_SYMBOLS = [
@@ -70,6 +73,7 @@ export function AnalystSection() {
   const [data, setData] = useState<AnalysisData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { toPDF, targetRef } = usePDF({ filename: `valuation-${ticker}.pdf`, page: { margin: 12 } });
 
   const fetchData = async () => {
     setLoading(true);
@@ -281,6 +285,16 @@ export function AnalystSection() {
                 </>
               )}
             </Button>
+            {data && !loading && (
+              <Button
+                variant="outline"
+                onClick={() => toPDF()}
+                className="px-6 py-2"
+              >
+                <FileDown className="mr-2 h-4 w-4" />
+                Export PDF
+              </Button>
+            )}
           </div>
           
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
@@ -449,6 +463,146 @@ export function AnalystSection() {
           )}
         </div>
       </div>
+      {/* Offscreen export container to include ALL charts (even those hidden by tabs) */}
+      {data && !loading && (
+        <div
+          ref={targetRef}
+          style={{ position: "absolute", left: "-10000px", top: 0, width: 1024, background: "white", padding: 24 }}
+        >
+          {/* PDF-only styles to control page breaks and alignment */}
+          <style>
+            {`
+              .pdf-export * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+              .pdf-export .avoid-break { break-inside: avoid; page-break-inside: avoid; }
+              .pdf-export table { width: 100%; border-collapse: collapse; }
+              .pdf-export th, .pdf-export td { text-align: left !important; vertical-align: top; }
+              .pdf-export h1, .pdf-export h2, .pdf-export h3 { text-align: left !important; }
+            `}
+          </style>
+          <div className="space-y-8 pdf-export">
+            <h1 className="text-3xl font-bold mb-2">Challenge de Valorisation</h1>
+            <div>
+              <h2 className="text-xl font-semibold">
+                {data.profile.companyName} ({data.profile.symbol})
+              </h2>
+              <p className="text-sm text-gray-600">
+                {data.profile.sector} • {data.profile.industry}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-6 avoid-break">
+              <KPICard
+                title="Prix Actuel"
+                value={data.profile.price}
+                icon={DollarSign}
+                variant="default"
+              />
+              <KPICard
+                title="Market Cap"
+                value={data.profile.mktCap || data.profile.marketCap}
+                icon={Building2}
+                variant="default"
+              />
+              <KPICard
+                title="Croissance FCF"
+                value={`${(data.avgGrowth * 100).toFixed(1)}%`}
+                icon={TrendingUp}
+                variant={data.avgGrowth > 0 ? "success" : "danger"}
+                formatValue={(v) => String(v)}
+              />
+            </div>
+
+            <div className="avoid-break">
+              <ValuationGauge
+                currentPrice={data.profile.price}
+                fairValue={data.fairValue}
+                companyName={data.profile.companyName}
+              />
+            </div>
+
+            <div className="space-y-6">
+              <div className="avoid-break">
+                <FinancialLineChart
+                  data={fcfChartData}
+                  title="Historique du Free Cash Flow (5 ans)"
+                  color="#3b82f6"
+                />
+              </div>
+
+              <div className="avoid-break">
+                <FinancialBarChart
+                  data={dcfChartData}
+                  title="Projections DCF - FCF Projeté vs Actualisé"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Card className="avoid-break">
+                  <CardContent className="p-4">
+                    <h4 className="font-semibold mb-2">Paramètres du Modèle</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>WACC:</span>
+                        <span>8.0%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Croissance terminale:</span>
+                        <span>2.5%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Période de projection:</span>
+                        <span>5 ans</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="avoid-break">
+                  <CardContent className="p-4">
+                    <h4 className="font-semibold mb-2">Résultats DCF</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Valeur d'entreprise:</span>
+                        <span className="font-semibold">
+                          {data.enterpriseValue.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                            maximumFractionDigits: 0,
+                          })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Fair Value par action:</span>
+                        <span className="font-semibold">
+                          {data.fairValue.toLocaleString("en-US", {
+                            style: "currency",
+                            currency: "USD",
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Force a new PDF page before the comparables section to avoid splitting */}
+              <div style={{ pageBreakBefore: "always" }} />
+
+              <ComparableTable
+                currentSymbol={data.profile.symbol}
+                currentCompanyName={data.profile.companyName}
+                currentSymbolRatios={{
+                  priceToEarningsRatio: data.currentSymbolRatios?.priceToEarningsRatio,
+                  enterpriseValueMultiple: data.currentSymbolRatios?.enterpriseValueMultiple,
+                  priceToSalesRatio: data.currentSymbolRatios?.priceToSalesRatio,
+                }}
+                peersRatios={data.peersRatios}
+                sectorAverages={data.sectorAverages}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
