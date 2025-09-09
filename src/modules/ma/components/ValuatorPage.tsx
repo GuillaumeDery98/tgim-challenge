@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Calculator, AlertCircle, Sparkles } from 'lucide-react';
+import { AnalystSection } from './challenge/Analyst';
 
 export function ValuatorPage() {
   return (
@@ -62,6 +63,8 @@ export function ValuatorPage() {
           </div>
         </CardContent>
       </Card>
+
+      <AnalystSection />
     </div>
   );
 }
