@@ -1,7 +1,7 @@
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Mail, AlertCircle, Sparkles } from 'lucide-react';
+import { Email } from '@/modules/ma/components/challenge/Email';
 
 export function EmailSystem() {
   return (
@@ -62,6 +62,7 @@ export function EmailSystem() {
           </div>
         </CardContent>
       </Card>
+      <Email />
     </div>
   );
 }
