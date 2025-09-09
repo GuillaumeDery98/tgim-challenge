@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 
-const API_KEY = "";
+const API_KEY = import.meta.env.VITE_FINANCIAL_PREP_KEY;
 
 // Symboles autorisés pour la version gratuite
 const ALLOWED_SYMBOLS = [
