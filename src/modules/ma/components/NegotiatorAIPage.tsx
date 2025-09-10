@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MessageCircle, Bot, AlertCircle, Sparkles } from 'lucide-react';
-
+import { NegociatorComponent } from '@/modules/ma/components/Negociator';
 export function NegotiatorAIPage() {
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -132,6 +132,7 @@ export function NegotiatorAIPage() {
           </div>
         </CardContent>
       </Card>
+      <NegociatorComponent />
     </div>
   );
 }

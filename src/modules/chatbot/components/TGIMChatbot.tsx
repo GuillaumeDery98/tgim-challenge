@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MessageCircle, Brain, AlertCircle, Sparkles } from 'lucide-react';
+import { Chatbot } from '@/modules/ma/components/challenge/Chatbot';
 
 export function TGIMChatbot() {
   return (
@@ -62,6 +63,7 @@ export function TGIMChatbot() {
           </div>
         </CardContent>
       </Card>
+      <Chatbot />
     </div>
   );
 }
