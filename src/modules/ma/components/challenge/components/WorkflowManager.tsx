@@ -8,7 +8,29 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Play, Pause, Settings, Zap, Users, Mail, Calendar, TrendingUp } from 'lucide-react';
-import { workflowTriggers } from '../data/email-templates';
+// Triggers génériques sans fake data spécifique
+const workflowTriggers = [
+  {
+    type: 'contact_created',
+    name: 'Nouveau contact',
+    description: 'Déclenché quand un nouveau contact est créé'
+  },
+  {
+    type: 'campaign_sent',
+    name: 'Campagne envoyée',
+    description: 'Déclenché après envoi d\'une campagne'
+  },
+  {
+    type: 'email_opened',
+    name: 'Email ouvert',
+    description: 'Déclenché quand un email est ouvert'
+  },
+  {
+    type: 'link_clicked',
+    name: 'Lien cliqué',
+    description: 'Déclenché quand un lien est cliqué'
+  }
+];
 import { useEmailTemplates } from '../hooks/useEmailTemplates';
 import confetti from 'canvas-confetti';
 import type { EmailWorkflow } from '../types/email.types';

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { brevoService } from '../services/brevo-service';
+import { brevoService } from '../services/secure-brevo-service';
 import type { EmailContact, BounceRecord } from '../types/email.types';
 
 export const useEmailContacts = (limit = 50, offset = 0) => {

@@ -4,11 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Mail, Users, TrendingUp, Settings, Plus, Send } from 'lucide-react';
-import { brevoService } from './services/brevo-service';
+import { brevoService } from './services/secure-brevo-service';
 import { useEmailCampaigns, useAllCampaignAnalytics } from './hooks/useEmailCampaigns';
 import { useEmailTemplates } from './hooks/useEmailTemplates';
 import { useEmailContacts } from './hooks/useEmailContacts';
-import { defaultTemplates } from './data/email-templates';
 import { EmailAnalyticsDashboard } from './components/EmailAnalyticsDashboard';
 import { CampaignManager } from './components/CampaignManager';
 import { TemplateManager } from './components/TemplateManager';
@@ -27,20 +26,13 @@ export function Email() {
   useEffect(() => {
     const initializeEmailSystem = async () => {
       try {
-        // Initialize Brevo service (async)
+        // Initialize Secure Brevo service (via backend)
         await brevoService.initialize({
-          apiKey: (import.meta as any).env?.VITE_BREVO_API_KEY || '',
           defaultFromEmail: 'noreply@tgim-challenge.com',
           defaultFromName: 'TGIM Challenge'
         });
 
-        // Load default templates if none exist
-        const existingTemplates = await brevoService.getEmailTemplates();
-        if (existingTemplates.length === 0) {
-          for (const template of defaultTemplates) {
-            await brevoService.createEmailTemplate(template);
-          }
-        }
+        // Le système utilise maintenant uniquement les templates réels de Brevo
 
         setIsInitialized(true);
       } catch (error) {
@@ -62,9 +54,9 @@ export function Email() {
     );
   }
 
-  const totalSent = analytics.reduce((sum, a) => sum + a.sent, 0);
-  const totalDelivered = analytics.reduce((sum, a) => sum + a.delivered, 0);
-  const totalOpened = analytics.reduce((sum, a) => sum + a.opened, 0);
+  const totalSent = (analytics || []).reduce((sum: number, a: any) => sum + (a?.sent || 0), 0);
+  const totalDelivered = (analytics || []).reduce((sum: number, a: any) => sum + (a?.delivered || 0), 0);
+  const totalOpened = (analytics || []).reduce((sum: number, a: any) => sum + (a?.opened || 0), 0);
   const avgOpenRate = totalDelivered > 0 ? (totalOpened / totalDelivered) * 100 : 0;
 
   return (

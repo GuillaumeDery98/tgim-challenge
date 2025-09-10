@@ -204,5 +204,116 @@ export interface SessionOutcome {
   timestamp: string;
 }
 
+// Types pour le Chatbot TGIM avec RAG
+export interface TGIMDocument {
+  id: string;
+  title: string;
+  content: string;
+  category: 'guide' | 'formation' | 'template' | 'checklist' | 'case_study' | 'tool';
+  tags: string[];
+  embedding?: number[];
+  url?: string;
+  author?: string;
+  created_at: string;
+  updated_at: string;
+  difficulty_level: 'beginner' | 'intermediate' | 'advanced';
+  estimated_read_time: number;
+  related_modules?: ('M1' | 'M2' | 'M3' | 'M4')[];
+}
+
+export interface TGIMChatMessage {
+  id: string;
+  session_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+  sources?: DocumentSource[];
+  confidence_score?: number;
+  follow_up_questions?: string[];
+  search_query?: string;
+  response_time_ms?: number;
+}
+
+export interface RAGResponse {
+  answer: string;
+  sources: DocumentSource[];
+  confidence: number;
+  search_query: string;
+  follow_up_questions: string[];
+  related_topics: string[];
+  response_metadata: {
+    documents_searched: number;
+    processing_time_ms: number;
+    model_used: string;
+    search_strategy: 'semantic' | 'keyword' | 'hybrid';
+  };
+}
+
+export interface DocumentSource {
+  document: TGIMDocument;
+  relevance_score: number;
+  excerpt: string;
+  highlighted_terms: string[];
+  section?: string;
+  page_number?: number;
+}
+
+export interface TGIMChatSession {
+  id: string;
+  user_id: string;
+  started_at: string;
+  ended_at?: string;
+  status: 'active' | 'paused' | 'completed';
+  messages: TGIMChatMessage[];
+  context: TGIMSessionContext;
+  stats: SessionStats;
+}
+
+export interface TGIMSessionContext {
+  user_profile: {
+    experience_level: 'beginner' | 'intermediate' | 'advanced';
+    areas_of_interest: string[];
+    current_project_phase?: 'prospection' | 'negociation' | 'due_diligence' | 'closing';
+    industry_focus?: string;
+  };
+  conversation_summary: string;
+  key_topics_discussed: string[];
+  documents_referenced: string[];
+  learning_objectives?: string[];
+}
+
+export interface SessionStats {
+  message_count: number;
+  documents_consulted: number;
+  topics_covered: string[];
+  avg_confidence_score: number;
+  total_response_time_ms: number;
+  user_satisfaction?: number;
+}
+
+export interface SearchQuery {
+  query: string;
+  filters?: {
+    categories?: TGIMDocument['category'][];
+    tags?: string[];
+    difficulty_level?: TGIMDocument['difficulty_level'][];
+    modules?: ('M1' | 'M2' | 'M3' | 'M4')[];
+  };
+  search_options: {
+    max_results: number;
+    min_relevance_score: number;
+    strategy: 'semantic' | 'keyword' | 'hybrid';
+  };
+}
+
+export interface KnowledgeBaseStats {
+  total_documents: number;
+  documents_by_category: Record<TGIMDocument['category'], number>;
+  total_content_length: number;
+  avg_document_length: number;
+  most_popular_tags: Array<{ tag: string; count: number }>;
+  last_updated: string;
+}
+
 
 

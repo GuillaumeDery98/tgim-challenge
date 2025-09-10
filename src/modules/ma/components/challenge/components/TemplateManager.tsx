@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, Mail, Edit, Trash2, Copy, Eye, Calendar } from 'lucide-react';
 import { useEmailTemplates, useCreateTemplate, useUpdateTemplate, useDeleteTemplate } from '../hooks/useEmailTemplates';
-import { brevoService } from '../services/brevo-service';
+import { brevoService } from '../services/secure-brevo-service';
 import confetti from 'canvas-confetti';
 import type { EmailTemplate } from '../types/email.types';
 
@@ -280,7 +280,7 @@ export function TemplateManager() {
                     onClick={() => setPreviewTemplate(template)}
                   >
                     <div dangerouslySetInnerHTML={{ 
-                      __html: template.htmlContent.replace(/{{([^}]+)}}/g, '<span class="bg-yellow-200 px-1 rounded">$1</span>')
+                      __html: (template.htmlContent || '').replace(/{{([^}]+)}}/g, '<span class="bg-yellow-200 px-1 rounded">$1</span>')
                     }} />
                   </div>
                   
@@ -379,7 +379,7 @@ export function TemplateManager() {
               <div>
                 <Label className="text-sm font-medium">Sujet:</Label>
                 <div className="mt-1 p-2 bg-gray-50 rounded text-sm">
-                  {previewTemplate.subject}
+                  {previewTemplate.subject || ''}
                 </div>
               </div>
               
@@ -387,7 +387,7 @@ export function TemplateManager() {
                 <Label className="text-sm font-medium">Contenu:</Label>
                 <div className="mt-1 border rounded-lg overflow-hidden">
                   <iframe
-                    srcDoc={previewTemplate.htmlContent}
+                    srcDoc={previewTemplate.htmlContent || ''}
                     className="w-full h-96"
                     title="Template Preview"
                   />
