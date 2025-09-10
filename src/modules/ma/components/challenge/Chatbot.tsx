@@ -1,7 +1,8 @@
 
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, Loader2, BookOpen, Search, Clock, Award, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
+import axios from 'axios';
+import { Send, Bot, User, Loader2, BookOpen, Search, Clock, Award, ExternalLink, ChevronDown, ChevronUp, Plus, Trash2, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -9,8 +10,72 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useTGIMChatbot, useTGIMChatMessages, useTGIMSessionContext } from '../../hooks/useTGIMChatbot';
 import { TGIMChatMessage, DocumentSource, TGIMDocument } from '../../types';
+
+// Backend API helpers (axios)
+function normalizeBaseUrl(input?: string): string {
+  const fallback = 'http://127.0.0.1:8001/api';
+  if (!input) return fallback;
+  let u = input.trim();
+  if (u.startsWith('/')) return `${window.location.origin.replace(/\/+$/, '')}${u}`.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(u)) u = `http://${u}`; // ensure protocol
+  return u.replace(/\/+$/, '');
+}
+
+const BASE_URL = normalizeBaseUrl((import.meta as any).env?.VITE_BACKEND_URL);
+const http = axios.create({ baseURL: BASE_URL });
+
+const api = {
+  async ensureSession(externalId: string, metadata?: any) {
+    const { data } = await http.post('/v1/chat/session', { external_id: externalId, metadata });
+    return data;
+  },
+  async getMessages(externalId: string) {
+    const { data } = await http.get(`/v1/chat/${externalId}/messages`);
+    return data;
+  },
+  async postMessage(externalId: string, role: 'user' | 'assistant' | 'system', content: string) {
+    const { data } = await http.post(`/v1/chat/${externalId}/messages`, { role, content });
+    return data;
+  },
+  async query(query: string) {
+    const { data } = await http.post('/v1/chat/query', { query });
+    return data;
+  },
+  async listDocuments() {
+    const { data } = await http.get('/v1/documents');
+    return data;
+  },
+  async uploadDocument(file: File, meta?: { title?: string; category?: string }) {
+    // For text and JSON files, prefer inline content path to avoid multipart issues
+    if (file.type.startsWith('text/') || file.type === 'application/json') {
+      const content = await file.text();
+      const payload: any = {
+        title: meta?.title || file.name.replace(/\.[^.]+$/, ''),
+        category: meta?.category,
+        content,
+      };
+      const { data } = await http.post('/v1/documents/upload', payload);
+      return data;
+    }
+    const form = new FormData();
+    form.append('file', file);
+    if (meta?.title) form.append('title', meta.title);
+    if (meta?.category) form.append('category', meta.category);
+    const { data } = await http.post('/v1/documents/upload', form);
+    return data;
+  },
+  async getSessions(page = 1, search = '') {
+    const { data } = await http.get('/v1/chat/sessions', {
+      params: { page, search }
+    });
+    return data;
+  },
+  async deleteSession(externalId: string) {
+    const { data } = await http.delete(`/v1/chat/sessions/${externalId}`);
+    return data;
+  },
+};
 
 // Composant pour afficher un message avec ses sources
 function MessageWithSources({ message }: { message: TGIMChatMessage }) {
@@ -136,14 +201,163 @@ function MessageWithSources({ message }: { message: TGIMChatMessage }) {
   );
 }
 
+// Composant pour l'historique des chats
+function ChatHistory({ 
+  currentSessionId, 
+  onSessionSelect, 
+  onNewSession 
+}: {
+  currentSessionId: string;
+  onSessionSelect: (sessionId: string) => void;
+  onNewSession: () => void;
+}) {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
+  const loadSessions = async (pageNum = 1, searchTerm = '') => {
+    setLoading(true);
+    try {
+      const data = await api.getSessions(pageNum, searchTerm);
+      if (pageNum === 1) {
+        setSessions(data.sessions);
+      } else {
+        setSessions(prev => [...prev, ...data.sessions]);
+      }
+      setHasMore(data.pagination.current_page < data.pagination.last_page);
+    } catch (error) {
+      console.error('Erreur lors du chargement des sessions:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSessions(1, search);
+  }, [search]);
+
+  const handleDeleteSession = async (externalId: string) => {
+    try {
+      await api.deleteSession(externalId);
+      setSessions(prev => prev.filter(s => s.external_id !== externalId));
+    } catch (error) {
+      console.error('Erreur lors de la suppression:', error);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+    
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    } else if (diffInHours < 24 * 7) {
+      return date.toLocaleDateString('fr-FR', { weekday: 'short' });
+    } else {
+      return date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+    }
+  };
+
+  return (
+    <div className="w-80 border-r bg-muted/30 flex flex-col min-h-0">
+      <div className="p-4 border-b">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold flex items-center gap-2">
+            <MessageSquare className="w-4 h-4" />
+            Historique des chats
+          </h3>
+          <Button
+            size="sm"
+            onClick={onNewSession}
+            className="h-8 w-8 p-0"
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+        <Input
+          placeholder="Rechercher dans les chats..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="h-8"
+        />
+      </div>
+      
+      <ScrollArea className="flex-1">
+        <div className="p-2 space-y-1">
+          {sessions.map((session) => (
+            <div
+              key={session.external_id}
+              className={`p-3 rounded-lg cursor-pointer transition-colors group ${
+                session.external_id === currentSessionId
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-muted/50'
+              }`}
+              onClick={() => onSessionSelect(session.external_id)}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">
+                    {session.title || `Chat ${session.external_id.slice(-8)}`}
+                  </div>
+                  {session.messages && session.messages.length > 0 && (
+                    <div className="text-xs opacity-70 mt-1 line-clamp-2">
+                      {session.messages[0].content}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mt-2 text-xs opacity-60">
+                    <Clock className="w-3 h-3" />
+                    {formatDate(session.created_at)}
+                    <span>•</span>
+                    <span>{session.messages_count} messages</span>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteSession(session.external_id);
+                  }}
+                >
+                  <Trash2 className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          ))}
+          
+          {loading && (
+            <div className="flex justify-center p-4">
+              <Loader2 className="w-4 h-4 animate-spin" />
+            </div>
+          )}
+          
+          {sessions.length === 0 && !loading && (
+            <div className="text-center py-8 text-muted-foreground">
+              <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">Aucun chat trouvé</p>
+              <p className="text-xs mt-1">Commencez une nouvelle conversation</p>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+    </div>
+  );
+}
+
 // Composant pour le panel des sources et documents
-function KnowledgePanel({ knowledgeStats, recommendedDocuments, searchResults }: {
+function KnowledgePanel({ knowledgeStats, recommendedDocuments, searchResults, onUploadFiles, isChatting }: {
   knowledgeStats: any;
   recommendedDocuments: TGIMDocument[];
   searchResults?: DocumentSource[];
+  onUploadFiles: (files: FileList | null) => Promise<void> | void;
+  isChatting: boolean;
 }) {
   return (
-    <div className="w-80 border-l bg-muted/30">
+    <div className="w-80 border-l bg-muted/30 flex flex-col min-h-0">
       <div className="p-4 border-b">
         <h3 className="font-semibold flex items-center gap-2">
           <BookOpen className="w-4 h-4" />
@@ -152,16 +366,29 @@ function KnowledgePanel({ knowledgeStats, recommendedDocuments, searchResults }:
         <p className="text-sm text-muted-foreground mt-1">
           {knowledgeStats?.total_documents || 0} documents disponibles
         </p>
+        <div className="mt-2">
+          <input
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(e) => onUploadFiles(e.target.files)}
+            id="knowledge-upload-input"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isChatting}
+            onClick={() => document.getElementById('knowledge-upload-input')?.click()}
+          >
+            Uploader des documents
+          </Button>
+        </div>
       </div>
       
-      <Tabs defaultValue="recommended" className="flex-1">
-        <TabsList className="grid w-full grid-cols-2 m-4 mb-2">
-          <TabsTrigger value="recommended" className="text-xs">Recommandés</TabsTrigger>
-          <TabsTrigger value="search" className="text-xs">Recherche</TabsTrigger>
-        </TabsList>
+      <Tabs defaultValue="recommended" className="flex-1 min-h-0 flex flex-col">
         
-        <TabsContent value="recommended" className="px-4 pb-4">
-          <ScrollArea className="h-96">
+        <TabsContent value="recommended" className="px-4 pb-4 flex-1 min-h-0">
+          <ScrollArea className="h-full">
             <div className="space-y-3">
               {recommendedDocuments.map((doc) => (
                 <Card key={doc.id} className="p-3 hover:bg-muted/50 transition-colors cursor-pointer">
@@ -212,8 +439,8 @@ function KnowledgePanel({ knowledgeStats, recommendedDocuments, searchResults }:
           </ScrollArea>
         </TabsContent>
         
-        <TabsContent value="search" className="px-4 pb-4">
-          <ScrollArea className="h-96">
+        <TabsContent value="search" className="px-4 pb-4 flex-1 min-h-0">
+          <ScrollArea className="h-full">
             <div className="space-y-3">
               {searchResults && searchResults.length > 0 ? (
                 searchResults.map((result, index) => (
@@ -263,40 +490,17 @@ function KnowledgePanel({ knowledgeStats, recommendedDocuments, searchResults }:
 
 export function Chatbot() {
   const [inputValue, setInputValue] = useState('');
-  const [sessionId] = useState(() => `session-${Date.now()}`);
+  const [sessionId, setSessionId] = useState(() => `session-${Date.now()}`);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  
-  // Hooks pour la gestion du chatbot
-  const { getMessages, addMessage } = useTGIMChatMessages(sessionId);
-  const {
-    sendMessage,
-    isChatting,
-    chatError,
-    recommendedDocuments,
-    knowledgeStats,
-    searchResults
-  } = useTGIMChatbot({
-    sessionId,
-    sessionContext: {
-      user_profile: {
-        experience_level: 'intermediate',
-        areas_of_interest: ['reprise-entreprise', 'négociation', 'financement'],
-        current_project_phase: 'prospection'
-      },
-      conversation_summary: '',
-      key_topics_discussed: [],
-      documents_referenced: []
-    },
-    onMessageReceived: (response) => {
-      console.log('Nouvelle réponse reçue:', response);
-    },
-    onError: (error) => {
-      console.error('Erreur chatbot:', error);
-    }
-  });
-  
-  const messages = getMessages();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [messages, setMessages] = useState<TGIMChatMessage[]>([]);
+  const [isChatting, setIsChatting] = useState(false);
+  const [chatError, setChatError] = useState<Error | null>(null);
+  const [recommendedDocuments, setRecommendedDocuments] = useState<TGIMDocument[]>([]);
+  const [knowledgeStats, setKnowledgeStats] = useState<any>({ total_documents: 0 });
+  const [searchResults, setSearchResults] = useState<DocumentSource[] | undefined>(undefined);
   
   // Auto-scroll vers le bas
   const scrollToBottom = () => {
@@ -313,6 +517,45 @@ export function Chatbot() {
       inputRef.current.focus();
     }
   }, []);
+
+  // Bootstrap session and load messages + documents
+  useEffect(() => {
+    (async () => {
+      try {
+        await api.ensureSession(sessionId, { created_at: new Date().toISOString() });
+        const [serverMessages, docs] = await Promise.all([
+          api.getMessages(sessionId),
+          api.listDocuments(),
+        ]);
+        setMessages(
+          (serverMessages || []).map((m: any) => ({
+            id: String(m.id),
+            session_id: sessionId,
+            role: m.role,
+            content: m.content,
+            timestamp: m.created_at,
+            sources: m.sources || undefined,
+            follow_up_questions: m.follow_up_questions || undefined,
+            response_time_ms: m.response_time_ms || undefined,
+            confidence_score: m.confidence_score || undefined,
+          }))
+        );
+        const formattedDocs: TGIMDocument[] = (docs || []).map((d: any) => ({
+          id: String(d.id),
+          title: d.title,
+          category: d.category || 'Général',
+          difficulty_level: d.difficulty_level || 'Tous niveaux',
+          estimated_read_time: d.estimated_read_time || 5,
+          tags: d.tags || [],
+        }));
+        setRecommendedDocuments(formattedDocs);
+        setKnowledgeStats({ total_documents: formattedDocs.length });
+      } catch (e: any) {
+        console.error(e);
+        setChatError(e);
+      }
+    })();
+  }, [sessionId]);
   
   // Écouter les questions de suivi
   useEffect(() => {
@@ -331,24 +574,86 @@ export function Chatbot() {
   
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isChatting) return;
-    
+    setChatError(null);
+    const content = inputValue.trim();
     const userMessage: TGIMChatMessage = {
       id: `msg-${Date.now()}-user`,
       session_id: sessionId,
       role: 'user',
-      content: inputValue.trim(),
+      content,
       timestamp: new Date().toISOString(),
-      search_query: inputValue.trim()
+      search_query: content,
     };
-    
-    // Ajouter le message utilisateur immédiatement
-    addMessage(userMessage);
-    
-    const query = inputValue.trim();
+
+    setMessages((prev) => [...prev, userMessage]);
     setInputValue('');
-    
-    // Envoyer le message au service RAG
-    sendMessage(query);
+    setIsChatting(true);
+    try {
+      await api.postMessage(sessionId, 'user', content);
+      const rag = await api.query(content);
+      setSearchResults(rag?.sources || []);
+      const assistantMessage: TGIMChatMessage = {
+        id: `msg-${Date.now()}-assistant`,
+        session_id: sessionId,
+        role: 'assistant',
+        content: rag?.answer || (rag?.sources?.length ? 'Voici ce que j’ai trouvé dans les documents:' : 'Aucune source pertinente trouvée.'),
+        timestamp: new Date().toISOString(),
+        sources: rag?.sources || [],
+        confidence_score: undefined,
+        response_time_ms: undefined,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+      await api.postMessage(sessionId, 'assistant', assistantMessage.content);
+      // Refresh docs/knowledge stats after each query (optional)
+      try {
+        const docs = await api.listDocuments();
+        const formattedDocs: TGIMDocument[] = (docs || []).map((d: any) => ({
+          id: String(d.id),
+          title: d.title,
+          category: d.category || 'Général',
+          difficulty_level: d.difficulty_level || 'Tous niveaux',
+          estimated_read_time: d.estimated_read_time || 5,
+          tags: d.tags || [],
+        }));
+        setRecommendedDocuments(formattedDocs);
+        setKnowledgeStats({ total_documents: formattedDocs.length });
+      } catch {}
+    } catch (e: any) {
+      console.error(e);
+      setChatError(e);
+    } finally {
+      setIsChatting(false);
+    }
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFilesSelected = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsChatting(true);
+    try {
+      for (const file of Array.from(files)) {
+        await api.uploadDocument(file);
+      }
+      const docs = await api.listDocuments();
+      const formattedDocs: TGIMDocument[] = (docs || []).map((d: any) => ({
+        id: String(d.id),
+        title: d.title,
+        category: d.category || 'Général',
+        difficulty_level: d.difficulty_level || 'Tous niveaux',
+        estimated_read_time: d.estimated_read_time || 5,
+        tags: d.tags || [],
+      }));
+      setRecommendedDocuments(formattedDocs);
+      setKnowledgeStats({ total_documents: formattedDocs.length });
+    } catch (e: any) {
+      console.error(e);
+      setChatError(e);
+    } finally {
+      setIsChatting(false);
+    }
   };
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -356,6 +661,58 @@ export function Chatbot() {
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  const handleSessionSelect = async (newSessionId: string) => {
+    if (newSessionId === sessionId) return;
+    
+    setSessionId(newSessionId);
+    setMessages([]);
+    setSearchResults(undefined);
+    setChatError(null);
+    
+    try {
+      const [serverMessages, docs] = await Promise.all([
+        api.getMessages(newSessionId),
+        api.listDocuments(),
+      ]);
+      
+      setMessages(
+        (serverMessages || []).map((m: any) => ({
+          id: String(m.id),
+          session_id: newSessionId,
+          role: m.role,
+          content: m.content,
+          timestamp: m.created_at,
+          sources: m.sources || undefined,
+          follow_up_questions: m.follow_up_questions || undefined,
+          response_time_ms: m.response_time_ms || undefined,
+          confidence_score: m.confidence_score || undefined,
+        }))
+      );
+      
+      const formattedDocs: TGIMDocument[] = (docs || []).map((d: any) => ({
+        id: String(d.id),
+        title: d.title,
+        category: d.category || 'Général',
+        difficulty_level: d.difficulty_level || 'Tous niveaux',
+        estimated_read_time: d.estimated_read_time || 5,
+        tags: d.tags || [],
+      }));
+      setRecommendedDocuments(formattedDocs);
+      setKnowledgeStats({ total_documents: formattedDocs.length });
+    } catch (e: any) {
+      console.error(e);
+      setChatError(e);
+    }
+  };
+
+  const handleNewSession = () => {
+    const newSessionId = `session-${Date.now()}`;
+    setSessionId(newSessionId);
+    setMessages([]);
+    setSearchResults(undefined);
+    setChatError(null);
   };
   
   return (
@@ -380,15 +737,22 @@ export function Chatbot() {
           </div>
           <div className="flex items-center gap-1">
             <Bot className="w-4 h-4" />
-            <span>RAG Langchain</span>
+            <span>RAG</span>
           </div>
         </div>
       </div>
       
       {/* Interface principale */}
-      <div className="flex gap-6 h-[700px]">
+      <div className="flex gap-6 h-[700px] min-h-0">
+        {/* Historique des chats */}
+        <ChatHistory 
+          currentSessionId={sessionId}
+          onSessionSelect={handleSessionSelect}
+          onNewSession={handleNewSession}
+        />
+        
         {/* Zone de chat */}
-        <Card className="flex-1 flex flex-col">
+        <Card className="flex-1 flex flex-col min-h-0">
           <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 border-b">
             <div className="flex items-center gap-3">
               <Avatar className="h-8 w-8">
@@ -407,9 +771,9 @@ export function Chatbot() {
             </div>
           </CardHeader>
           
-          <CardContent className="flex-1 flex flex-col p-0">
+          <CardContent className="flex-1 flex flex-col p-0 min-h-0">
             {/* Messages */}
-            <ScrollArea className="flex-1 p-6">
+            <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-6">
                 {/* Message de bienvenue */}
                 {messages.length === 0 && (
@@ -540,7 +904,7 @@ export function Chatbot() {
                 
                 <div ref={messagesEndRef} />
               </div>
-            </ScrollArea>
+            </div>
             
             {/* Zone de saisie */}
             <div className="p-6 border-t bg-muted/30">
@@ -553,6 +917,13 @@ export function Chatbot() {
                   placeholder="Posez votre question sur la reprise d'entreprise..."
                   disabled={isChatting}
                   className="flex-1"
+                />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={(e) => handleFilesSelected(e.target.files)}
                 />
                 <Button
                   onClick={handleSendMessage}
@@ -595,6 +966,8 @@ export function Chatbot() {
           knowledgeStats={knowledgeStats}
           recommendedDocuments={recommendedDocuments}
           searchResults={searchResults}
+          onUploadFiles={handleFilesSelected}
+          isChatting={isChatting}
         />
       </div>
     </div>
